@@ -1,0 +1,28 @@
+project: kstrzala/RL-playground
+
+name: RL-playground
+tags: [tf, no_outer_bn]
+
+exclude:
+  - output
+  - models
+  - neptune.log
+  - offline_job.log
+
+parameters:
+#Data
+  model_filepath: WHERE-TO-SAVE-MODELS
+
+#Inner model
+  inner_model_runs: 50
+  inner_eps: 0.0001
+  convergence_const: 20
+
+#Outer model
+  outer_model_runs: 5000
+  outer_lr: 0.01
+  outer_momentum: 0.9
+
+#CUDA
+  cuda_visible_devices: 1
+
