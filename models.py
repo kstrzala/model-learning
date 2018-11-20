@@ -76,7 +76,7 @@ def get_inner_model_conv(batch_norm=True):
 
 
 class FullModel(tf.keras.Model):
-    INNER_MODEL = lambda: get_inner_model()
+    INNER_MODEL = lambda: get_inner_model(batch_norm=False)
     OUTER_MODEL = lambda: get_outer_model(batch_norm=False)
 
     def __init__(self):
