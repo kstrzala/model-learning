@@ -14,6 +14,9 @@ parameters:
   model_filepath: WHERE-TO-SAVE-MODELS
   model_name: model_params
 
+#Vizualization
+  compare_with_random: True
+
 #Inner model
   inner_model_runs: 50
   inner_eps: 0.0001

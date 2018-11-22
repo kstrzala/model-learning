@@ -66,10 +66,37 @@ def run_pipeline(ctx):
             inner_loop_count += 1
             ctx.channel_send("Inner loss", current_loss)
 
+        ctx.channel_send("Inner loop count", x=outer_loop_count, y=inner_loop_count)
+
+        if ctx.params['compare_with_random']:
+            random_model = FullModel(maze_size)
+            current_loss = 100
+            loss_counter = 0
+            inner_loop_count = 0
+            random_inner_optimizer = tf.train.AdamOptimizer()
+            while (loss_counter < ctx.params['loss_stabilization_steps']):
+                random_trajectory, random_solutions = shuffle_trajectory(trajectory, solutions)
+                tf_imgs, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
+
+                with tf.GradientTape() as tape:
+                    result = random_model(tf_imgs, inner_train=True)
+                    loss = tf.keras.losses.kld(tf_solutions, result)
+                grad = tape.gradient(loss, random_model.inner_model.variables)
+                random_inner_optimizer.apply_gradients(zip(grad, random_model.inner_model.variables))
+
+                last_loss = current_loss
+                current_loss = loss.numpy().mean()
+                if ((last_loss - current_loss) < ctx.params['inner_eps']):
+                    loss_counter += 1
+                else:
+                    loss_counter = 0
+                inner_loop_count += 1
+
+            ctx.channel_send("Inner loop count random", x=outer_loop_count, y=inner_loop_count)
+
         maze.reset()
         test_trajectory = maze.run_policy(model.policy)
         ctx.channel_send('Trajectory length', len(test_trajectory))
-        ctx.channel_send("Inner loop count", inner_loop_count)
 
         random_trajectory, random_solutions = shuffle_trajectory(trajectory, solutions)
         tf_imgs, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
