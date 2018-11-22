@@ -2,6 +2,20 @@ import numpy as np
 from queue import Queue
 
 
+def generate_maze(height=5, width=5, prob=0.6):
+    """
+    Generate valid maze (i.e. nontrivial maze with existing solution) of a given size.
+    :return: valid maze
+    """
+    while True:
+        maze = Maze(height, width, prob)
+        if maze.valid():
+            trajectory = maze.run_optimal_trajectory(form='coordinates', probs=False)
+            if len(trajectory)>1:
+                maze.reset()
+                return maze
+
+
 def define_probs(up, down, left, right):
     assert (up+down+left+right == 1)
     return np.array([up, down, left, right])
@@ -108,7 +122,7 @@ class Maze():
         self.position = position
         return self
         
-    def run_policy(self, policy, steps=25, probas=False):
+    def run_policy(self, policy, steps=50, probas=False):
         visited_states = []
         if probas:
             solution = self.get_solution()

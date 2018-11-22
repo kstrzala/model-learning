@@ -12,11 +12,13 @@ exclude:
 parameters:
 #Data
   model_filepath: WHERE-TO-SAVE-MODELS
+  model_name: model_params
 
 #Inner model
   inner_model_runs: 50
   inner_eps: 0.0001
   convergence_const: 20
+  loss_stabilization_steps: 20
 
 #Outer model
   outer_model_runs: 5000
@@ -25,4 +27,8 @@ parameters:
 
 #CUDA
   cuda_visible_devices: 1
+
+#Maze
+  maze_size: 10
+  maze_prob: 0.6
 
