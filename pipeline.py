@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from maze import generate_maze
-from models import FullModel
+from models import FullPositionalModel
 import random
 import os
 from PIL import Image
@@ -17,15 +17,18 @@ def shuffle_trajectory(trajectory, solutions):
     return random_trajectory, random_solutions
 
 
-def trajectory_to_tensor(maze, trajectory, solutions):
+def trajectory_to_tensor(maze, trajectory, solutions, images=False):
     tf_solutions = tf.convert_to_tensor(np.stack(solutions).astype(np.float32))
-    tf_trajectory = tf.convert_to_tensor(maze.trajectory_to_numpy(trajectory))
+    if images:
+        tf_trajectory = tf.convert_to_tensor(maze.trajectory_to_images(trajectory))
+    else:
+        tf_trajectory = tf.convert_to_tensor(maze.trajectory_to_numpy(trajectory))
     return tf_trajectory, tf_solutions
 
 
 def run_pipeline(ctx):
     maze_size = ctx.params['maze_size']
-    model = FullModel(maze_size)
+    model = FullPositionalModel(maze_size)
     outer_optimizer = tf.train.AdamOptimizer()
 
     for outer_loop_count in range(ctx.params['outer_model_runs']):
@@ -39,8 +42,8 @@ def run_pipeline(ctx):
 
         trajectory, solutions = maze.run_optimal_trajectory(form='coordinates')
         ctx.channel_send('Ideal trajectory length', len(trajectory))
-
         model.reset_inner_model()
+        model.call_outer(tf.convert_to_tensor(maze.get_maze_image().astype(np.float32)))
         inner_optimizer = tf.train.AdamOptimizer()
 
         current_loss = 100
@@ -48,10 +51,10 @@ def run_pipeline(ctx):
         inner_loop_count = 0
         while (loss_counter < ctx.params['loss_stabilization_steps']):
             random_trajectory, random_solutions = shuffle_trajectory(trajectory, solutions)
-            tf_imgs, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
+            tf_trajectory, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
 
             with tf.GradientTape() as tape:
-                result = model(tf_imgs, inner_train=True)
+                result = model.call_inner(tf_trajectory, training=True)
                 loss = tf.keras.losses.kld(tf_solutions, result)
             grad = tape.gradient(loss, model.inner_model.variables)
             inner_optimizer.apply_gradients(zip(grad, model.inner_model.variables))
@@ -69,17 +72,18 @@ def run_pipeline(ctx):
         ctx.channel_send("Inner loop count", x=outer_loop_count, y=inner_loop_count)
 
         if ctx.params['compare_with_random']:
-            random_model = FullModel(maze_size)
+            random_model = FullPositionalModel(maze_size)
+            random_model.call_outer(tf.convert_to_tensor(maze.get_maze_image().astype(np.float32)))
             current_loss = 100
             loss_counter = 0
             inner_loop_count = 0
             random_inner_optimizer = tf.train.AdamOptimizer()
             while (loss_counter < ctx.params['loss_stabilization_steps']):
                 random_trajectory, random_solutions = shuffle_trajectory(trajectory, solutions)
-                tf_imgs, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
+                tf_trajectory, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
 
                 with tf.GradientTape() as tape:
-                    result = random_model(tf_imgs, inner_train=True)
+                    result = random_model.call_inner(tf_trajectory, training=True)
                     loss = tf.keras.losses.kld(tf_solutions, result)
                 grad = tape.gradient(loss, random_model.inner_model.variables)
                 random_inner_optimizer.apply_gradients(zip(grad, random_model.inner_model.variables))
@@ -99,10 +103,10 @@ def run_pipeline(ctx):
         ctx.channel_send('Trajectory length', len(test_trajectory))
 
         random_trajectory, random_solutions = shuffle_trajectory(trajectory, solutions)
-        tf_imgs, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
+        tf_trajectory, tf_solutions = trajectory_to_tensor(maze, random_trajectory, random_solutions)
 
         with tf.GradientTape() as tape:
-            result = model(tf_imgs, outer_train=True)
+            result = model.call(tf.convert_to_tensor(maze.get_maze_image().astype(np.float32)), tf_trajectory, outer_training=True)
             loss = tf.keras.losses.kld(tf_solutions, result)
         grad = tape.gradient(loss, model.outer_model.variables)
         outer_optimizer.apply_gradients(zip(grad, model.outer_model.variables))

@@ -29,7 +29,7 @@ parameters:
   outer_momentum: 0.9
 
 #CUDA
-  cuda_visible_devices: 1
+  cuda_visible_devices: 2
 
 #Maze
   maze_size: 10

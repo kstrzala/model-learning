@@ -48,22 +48,17 @@ def get_outer_model_conv_10():
     ])
 
 
-def get_inner_model(input_size):
+def get_inner_model_dense(hidden_sizes=[50]):
+    hidden_layers = []
+    for size in hidden_sizes:
+        hidden_layers.append(kl.BatchNormalization(axis=1))
+        hidden_layers.append(kl.Dense(size, activation='elu'))
     return tf.keras.Sequential([
-        kl.Reshape((input_size,)),
-        kl.BatchNormalization(axis=1),
-        kl.Dense(50, activation='elu'),
-        kl.BatchNormalization(axis=1),
+        kl.Flatten(),
+        *hidden_layers,
         kl.Dense(4, activation='softmax')
     ])
 
-
-def get_inner_model_linear(input_size):
-    return tf.keras.Sequential([
-        kl.Reshape((input_size,)),
-        kl.BatchNormalization(axis=1),
-        kl.Dense(4),
-    ])
 
 
 def get_inner_model_conv_5(batch_norm=True):
@@ -100,14 +95,14 @@ def get_inner_model_conv_10():
 
 
 class FullModel(tf.keras.Model):
-    def __init__(self, maze_size):
+    def __init__(self, maze_size, position_image=True):
         super(FullModel, self).__init__()
+        self.InnerModelGenerator = lambda: get_inner_model_dense([50, 50])
+
         if maze_size==5:
             self.OuterModelGenerator = lambda: get_outer_model_5(batch_norm=False)
-            self.InnerModelGenerator = lambda: get_inner_model(5*5*4)
         elif maze_size==10:
             self.OuterModelGenerator = get_outer_model_conv_10
-            self.InnerModelGenerator = get_inner_model_conv_10
         else:
             raise RuntimeError("Maze size accepted are only 5 and 10")
 
@@ -122,6 +117,47 @@ class FullModel(tf.keras.Model):
     def policy(self, x):
         y = tf.convert_to_tensor(np.expand_dims(x, 0).astype(np.float32))
         y = self(y)
+        return y.numpy()[0]
+
+    def reset_inner_model(self):
+        self.inner_model = self.InnerModelGenerator()
+
+
+class FullPositionalModel(tf.keras.Model):
+    def __init__(self, maze_size):
+        super(FullPositionalModel, self).__init__()
+        self.InnerModelGenerator = lambda: get_inner_model_dense([50, 50])
+        if maze_size==5:
+            self.OuterModelGenerator = lambda: get_outer_model_5(batch_norm=False)
+        elif maze_size==10:
+            self.OuterModelGenerator = get_outer_model_conv_10
+        else:
+            raise RuntimeError("Maze size accepted are only 5 and 10")
+
+        self.outer_model = self.OuterModelGenerator()
+        self.inner_model = self.InnerModelGenerator()
+        self.representation = None
+
+    def call_outer(self, x, **kwargs):
+        if len(x.shape) == 3:
+            y = tf.expand_dims(x, axis=0)
+        y = self.outer_model(y, **kwargs)
+        self.representation = y
+
+    def call_inner(self, x, **kwargs):
+        shape_to_broadcast = tf.constant((x.shape[0], 1))
+        representation = tf.layers.flatten(self.representation)
+        full_x = tf.concat([tf.tile(representation, shape_to_broadcast), x], axis=1)
+        return self.inner_model(full_x, **kwargs)
+
+    def call(self, x, pos, outer_training=False, inner_training=False):
+        self.call_outer(x, training=outer_training)
+        return self.call_inner(pos, training=inner_training)
+
+    def policy(self, maze):
+        image = tf.convert_to_tensor(maze.get_maze_image().astype(np.float32))
+        position = tf.convert_to_tensor(np.expand_dims(np.array(maze.position).astype(np.float32), axis=0))
+        y = self(image, position)
         return y.numpy()[0]
 
     def reset_inner_model(self):

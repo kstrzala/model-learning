@@ -74,7 +74,7 @@ class Maze():
         endmaze, solution = square_maze_bfs(self)
         return endmaze[tuple(self.start)] == 1
     
-    def get_maze_image(self, fieldsize=8, barsize=2):
+    def get_maze_image(self, fieldsize=8, barsize=2, show_position=False):
         size_func = lambda x: x*(fieldsize + barsize) + barsize
         im = np.zeros((size_func(self.height),size_func(self.width),3),dtype=np.uint8)
         for i in range(self.rows.shape[0]):
@@ -89,14 +89,22 @@ class Maze():
                     im[i*(fieldsize+barsize):i*(fieldsize+barsize)+barsize,
                        j*(fieldsize+barsize):(j+1)*(fieldsize+barsize)+barsize 
                        ,:] = 255
-        im[(fieldsize+barsize)*self.position[0] + barsize + 2:(fieldsize+barsize)*(self.position[0]+1) -1,
-           (fieldsize+barsize)*self.position[1] + barsize + 2:(fieldsize+barsize)*(self.position[1]+1) -1,
-           0] = 255
-        im[(fieldsize+barsize)*self.goal[0] + barsize + 2:(fieldsize+barsize)*(self.goal[0]+1) -1,
-           (fieldsize+barsize)*self.goal[1] + barsize + 2:(fieldsize+barsize)*(self.goal[1]+1) -1,
-           1] = 255
+
+        im[(fieldsize + barsize) * self.goal[0] + barsize + 2:(fieldsize + barsize) * (self.goal[0] + 1) - 1,
+        (fieldsize + barsize) * self.goal[1] + barsize + 2:(fieldsize + barsize) * (self.goal[1] + 1) - 1,
+        1] = 255
+
+        if show_position:
+            im[(fieldsize+barsize)*self.position[0] + barsize + 2:(fieldsize+barsize)*(self.position[0]+1) -1,
+               (fieldsize+barsize)*self.position[1] + barsize + 2:(fieldsize+barsize)*(self.position[1]+1) -1,
+                0] = 255
+
         return im
-    
+
+    def get_position(self):
+        return np.array(self.position)
+
+
     def get_solution(self):
         _, solution = square_maze_bfs(self)
         return solution
@@ -129,7 +137,7 @@ class Maze():
             problist = []
             solution_list = []
         for i in range(steps):
-            p = policy(self.get_maze_image())
+            p = policy(self)
             move = np.random.choice(['up', 'down', 'left', 'right'], p=p)
             visited_states.append(self.position.copy())
             if probas:
@@ -142,9 +150,15 @@ class Maze():
             return visited_states, problist, solution_list
         return visited_states
     
-    def trajectory_to_numpy(self, trajectory):
+    def trajectory_to_images(self, trajectory):
         images = [self.teleport(t).get_maze_image() for t in trajectory]
         return np.stack(images).astype(np.float32)
+
+
+    def trajectory_to_numpy(self, trajectory):
+        np_traj = [np.array(t) for t in trajectory]
+        return np.stack(np_traj).astype(np.float32)
+
 
     def run_optimal_trajectory(self, form='images', probs=True):
         solution = self.get_solution()
